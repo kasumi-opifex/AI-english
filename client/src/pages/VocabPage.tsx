@@ -15,17 +15,28 @@ import { toast } from "sonner";
 // ============================================================
 // Flashcard Component
 // ============================================================
-function FlashCard({ word, onMastered, onNext, onPrev, current, total }: {
+function FlashCard({ word, onMastered, onNext, onPrev, current, total, direction }: {
   word: VocabWord;
   onMastered: () => void;
   onNext: () => void;
   onPrev: () => void;
   current: number;
   total: number;
+  direction: "en-ja" | "ja-en";
 }) {
   const [flipped, setFlipped] = useState(false);
 
   const handleFlip = () => setFlipped(!flipped);
+
+  // directionに応じて表面・裏面の内容を切り替え
+  const frontLabel = direction === "en-ja" ? "ENGLISH" : "JAPANESE";
+  const frontContent = direction === "en-ja" ? word.english : word.japanese;
+  const frontHint = direction === "en-ja" ? "タップして日本語を確認" : "タップして英語を確認";
+  const backLabel = direction === "en-ja" ? "JAPANESE" : "ENGLISH";
+  const backContent = direction === "en-ja" ? word.japanese : word.english;
+  const frontBorder = direction === "en-ja" ? "border-glow-lime" : "border-glow-cyan";
+  const backBorder = direction === "en-ja" ? "border-glow-cyan" : "border-glow-lime";
+  const backTextClass = direction === "en-ja" ? "text-primary glow-text-cyan" : "text-accent";
 
   return (
     <div className="flex flex-col items-center">
@@ -69,14 +80,14 @@ function FlashCard({ word, onMastered, onNext, onPrev, current, total }: {
         >
           {/* Front */}
           <div 
-            className="absolute inset-0 glass-panel rounded-2xl border border-glow-lime p-8 flex flex-col items-center justify-center"
+            className={`absolute inset-0 glass-panel rounded-2xl border ${frontBorder} p-8 flex flex-col items-center justify-center`}
             style={{ backfaceVisibility: "hidden" }}
           >
-            <div className="text-xs text-muted-foreground font-mono mb-4">ENGLISH</div>
+            <div className="text-xs text-muted-foreground font-mono mb-4">{frontLabel}</div>
             <div className="text-3xl sm:text-4xl font-bold text-foreground text-center mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              {word.english}
+              {frontContent}
             </div>
-            <div className="text-xs text-muted-foreground mt-4">タップして日本語を確認</div>
+            <div className="text-xs text-muted-foreground mt-4">{frontHint}</div>
             {word.topic && (
               <div className="mt-4 text-xs bg-secondary/50 text-muted-foreground px-3 py-1 rounded-full">
                 {word.topic}
@@ -86,14 +97,21 @@ function FlashCard({ word, onMastered, onNext, onPrev, current, total }: {
 
           {/* Back */}
           <div 
-            className="absolute inset-0 glass-panel rounded-2xl border border-glow-cyan p-8 flex flex-col items-center justify-center"
+            className={`absolute inset-0 glass-panel rounded-2xl border ${backBorder} p-8 flex flex-col items-center justify-center`}
             style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
           >
-            <div className="text-xs text-muted-foreground font-mono mb-4">JAPANESE</div>
-            <div className="text-2xl sm:text-3xl font-bold text-primary text-center mb-3 glow-text-cyan">
-              {word.japanese}
+            <div className="text-xs text-muted-foreground font-mono mb-4">{backLabel}</div>
+            <div className={`text-2xl sm:text-3xl font-bold text-center mb-3 ${backTextClass}`}>
+              {backContent}
             </div>
-            {word.example && (
+            {/* 英語が表面の場合は裏面に日本語、日本語が表面の場合は裏面に英語+例文 */}
+            {direction === "ja-en" && word.example && (
+              <div className="mt-4 text-center">
+                <div className="text-xs text-muted-foreground mb-2">例文</div>
+                <p className="text-xs text-foreground/80 leading-relaxed italic font-mono">{word.example}</p>
+              </div>
+            )}
+            {direction === "en-ja" && word.example && (
               <div className="mt-4 text-center">
                 <div className="text-xs text-muted-foreground mb-2">例文</div>
                 <p className="text-xs text-foreground/80 leading-relaxed italic font-mono">{word.example}</p>
@@ -202,6 +220,7 @@ function VocabPageContent() {
   const [filterMastered, setFilterMastered] = useState<"all" | "mastered" | "unmastered">("all");
   const [showAddForm, setShowAddForm] = useState(false);
   const [flashcardIndex, setFlashcardIndex] = useState(0);
+  const [flashDirection, setFlashDirection] = useState<"en-ja" | "ja-en">("en-ja");
 
   const topics = useMemo(() => {
     const topicSet = new Set(vocabWords.map(w => w.topic).filter(Boolean));
@@ -386,6 +405,31 @@ function VocabPageContent() {
               {/* Flashcard View */}
               {view === "flashcard" && filteredWords.length > 0 && (
                 <div className="py-4">
+                  {/* 方向切り替えボタン */}
+                  <div className="flex justify-center mb-5">
+                    <div className="flex bg-secondary/50 rounded-lg p-1 border border-border gap-1">
+                      <button
+                        onClick={() => { setFlashDirection("en-ja"); setFlashcardIndex(0); }}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded text-sm font-medium transition-all ${
+                          flashDirection === "en-ja"
+                            ? "bg-accent text-accent-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        英語 → 日本語
+                      </button>
+                      <button
+                        onClick={() => { setFlashDirection("ja-en"); setFlashcardIndex(0); }}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded text-sm font-medium transition-all ${
+                          flashDirection === "ja-en"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        日本語 → 英語
+                      </button>
+                    </div>
+                  </div>
                   <FlashCard
                     word={filteredWords[flashcardIndex]}
                     onMastered={() => handleMastered(filteredWords[flashcardIndex].id)}
@@ -393,6 +437,7 @@ function VocabPageContent() {
                     onPrev={() => setFlashcardIndex(i => Math.max(i - 1, 0))}
                     current={flashcardIndex}
                     total={filteredWords.length}
+                    direction={flashDirection}
                   />
                 </div>
               )}
