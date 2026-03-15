@@ -516,6 +516,44 @@ JSONのみ出力し、他のテキストは一切含めないでください。`
   return JSON.parse(jsonMatch[0]) as Array<{english: string; japanese: string; example: string}>;
 }
 
+// Gemini出力のテキストをパースして単語配列に変換
+function parseBulkVocab(raw: string): Array<{english: string; japanese: string; example: string}> {
+  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+  const result: Array<{english: string; japanese: string; example: string}> = [];
+  for (const line of lines) {
+    // マークダウン表形式: | 英語 | 日本語 | 例文 |
+    if (line.startsWith("|")) {
+      const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+      // ヘッダー行や区切り行をスキップ
+      if (cells.length < 2) continue;
+      if (cells[0].match(/^[-:]+$/) || cells[0].toLowerCase() === "英語" || cells[0].toLowerCase() === "english") continue;
+      result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "" });
+      continue;
+    }
+    // TSV形式: 英語\t日本語\t例文
+    if (line.includes("\t")) {
+      const cells = line.split("\t").map(c => c.trim());
+      if (cells.length >= 2) {
+        result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "" });
+      }
+      continue;
+    }
+    // カンマ区切り: 英語, 日本語, 例文
+    if (line.includes(",")) {
+      const cells = line.split(",").map(c => c.trim());
+      if (cells.length >= 2 && /^[a-zA-Z]/.test(cells[0])) {
+        result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "" });
+      }
+      continue;
+    }
+    // シンプルな英単語のみ（先頭が英字の場合）
+    if (/^[a-zA-Z]/.test(line) && !line.includes(" ")) {
+      result.push({ english: line, japanese: "", example: "" });
+    }
+  }
+  return result.filter(w => w.english);
+}
+
 function VocabInput({ topic }: { topic: string }) {
   const { addVocabWord, vocabWords, apiSettings } = useApp();
   const [english, setEnglish] = useState("");
@@ -523,6 +561,43 @@ function VocabInput({ topic }: { topic: string }) {
   const [example, setExample] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<{added: number; skipped: number} | null>(null);
+  // 一括ペースト登録
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkPreview, setBulkPreview] = useState<Array<{english: string; japanese: string; example: string}>>([]);
+  const [bulkParsed, setBulkParsed] = useState(false);
+
+  const handleBulkParse = () => {
+    const parsed = parseBulkVocab(bulkText);
+    setBulkPreview(parsed);
+    setBulkParsed(true);
+    if (parsed.length === 0) {
+      toast.error("認識できる形式の単語が見つかりませんでした");
+    } else {
+      toast.success(`${parsed.length}語を認識しました。内容を確認して登録してください`);
+    }
+  };
+
+  const handleBulkRegister = () => {
+    const existingEnglish = new Set(vocabWords.map(w => w.english.toLowerCase().trim()));
+    let added = 0;
+    let skipped = 0;
+    for (const w of bulkPreview) {
+      if (!w.english) continue;
+      if (existingEnglish.has(w.english.toLowerCase().trim())) {
+        skipped++;
+      } else {
+        addVocabWord({ english: w.english.trim(), japanese: w.japanese.trim(), example: w.example.trim(), topic: topic || "一般" });
+        existingEnglish.add(w.english.toLowerCase().trim());
+        added++;
+      }
+    }
+    toast.success(`${added}語を单語帳に登録しました${skipped > 0 ? `（${skipped}語は重複のためスキップ）` : ""}`);
+    setBulkText("");
+    setBulkPreview([]);
+    setBulkParsed(false);
+    setBulkMode(false);
+  };
 
   const handleAdd = () => {
     if (!english.trim() || !japanese.trim()) {
@@ -573,6 +648,86 @@ function VocabInput({ topic }: { topic: string }) {
 
   return (
     <div className="space-y-4">
+      {/* 一括ペースト登録 */}
+      <div className="bg-accent/10 border border-accent/30 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-bold text-sm flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <Copy size={16} className="text-accent" />
+            Gemini出力をまとめて登録
+          </h4>
+          <button
+            onClick={() => { setBulkMode(!bulkMode); setBulkParsed(false); setBulkPreview([]); setBulkText(""); }}
+            className="text-xs text-accent hover:text-accent/80 border border-accent/30 rounded px-2.5 py-1 transition-all"
+          >
+            {bulkMode ? "閉じる" : "ペースト登録を開く"}
+          </button>
+        </div>
+        {!bulkMode ? (
+          <p className="text-xs text-muted-foreground">
+            Geminiが出力した表（マークダウン表・TSV・カンマ区切り）をそのまま貼り付けて一括登録できます。
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Geminiの出力をそのまま貼り付けてください。マークダウン表・タブ区切り・カンマ区切りに対応しています。
+            </p>
+            <textarea
+              value={bulkText}
+              onChange={e => { setBulkText(e.target.value); setBulkParsed(false); setBulkPreview([]); }}
+              placeholder={`例：\n| coffee | コーヒー | I drink coffee every morning. |\n| enthusiastic | 熱心な | She is enthusiastic about... |\n\nまたはタブ区切り・カンマ区切り形式もOK`}
+              rows={8}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent font-mono leading-relaxed resize-y"
+            />
+            {!bulkParsed ? (
+              <button
+                onClick={handleBulkParse}
+                disabled={!bulkText.trim()}
+                className="flex items-center gap-2 bg-accent/20 text-accent border border-accent/40 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-accent/30 transition-all disabled:opacity-40"
+              >
+                <Check size={14} /> 内容を確認する
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <div className="bg-background/60 border border-border rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-secondary/40 border-b border-border">
+                    <span className="text-xs font-semibold text-foreground">認識結果: {bulkPreview.length}語</span>
+                    <button onClick={() => { setBulkParsed(false); setBulkPreview([]); }} className="ml-3 text-xs text-muted-foreground hover:text-foreground">再入力</button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-secondary/60">
+                        <tr>
+                          <th className="px-3 py-1.5 text-left text-muted-foreground font-medium">英語</th>
+                          <th className="px-3 py-1.5 text-left text-muted-foreground font-medium">日本語</th>
+                          <th className="px-3 py-1.5 text-left text-muted-foreground font-medium hidden sm:table-cell">例文</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkPreview.map((w, i) => (
+                          <tr key={i} className="border-t border-border/50">
+                            <td className="px-3 py-1.5 font-mono text-foreground">{w.english}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground">{w.japanese || <span className="text-amber-400/70">未入力</span>}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground/70 hidden sm:table-cell truncate max-w-[200px]">{w.example}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                {bulkPreview.length > 0 && (
+                  <button
+                    onClick={handleBulkRegister}
+                    className="flex items-center gap-2 bg-accent text-accent-foreground px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-all glow-lime"
+                  >
+                    <Plus size={14} /> {bulkPreview.length}語を単語帳に登録する
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* AI自動生成ボタン */}
       <div className="bg-primary/10 border border-primary/30 rounded-xl p-5">
         <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
@@ -643,27 +798,44 @@ function VocabInput({ topic }: { topic: string }) {
 // ============================================================
 // Prompt Card Component
 // ============================================================
-function PromptCard({ prompt }: { prompt: { label: string; text: string } }) {
+function PromptCard({ prompt, theme }: { prompt: { label: string; text: string }; theme?: string }) {
   const [copied, setCopied] = useState(false);
 
+  // テーマをプレースホルダーに自動埋め込み
+  const resolvedText = theme
+    ? prompt.text
+        .replace(/\[Step 1で選んだトピックを入力\]/g, theme)
+        .replace(/\[トピックを入力\]/g, theme)
+        .replace(/\[トピック\]/g, theme)
+    : prompt.text;
+  const hasReplacement = theme && resolvedText !== prompt.text;
+
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(prompt.text);
+    navigator.clipboard.writeText(resolvedText);
     setCopied(true);
-    toast.success("コピーしました");
-    setTimeout(() => setCopied(false), 2000);
-  }, [prompt.text]);
+    toast.success("コピーしました！Geminiに貼り付けてください");
+    setTimeout(() => setCopied(false), 2500);
+  }, [resolvedText]);
 
   return (
     <div className="bg-background/60 border border-border rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-secondary/30">
         <span className="text-xs text-muted-foreground font-mono">{prompt.label}</span>
-        <button onClick={handleCopy} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 text-xs bg-primary/20 text-primary border border-primary/30 rounded-md px-2.5 py-1 hover:bg-primary/30 transition-all font-semibold"
+        >
           {copied ? <Check size={12} className="text-accent" /> : <Copy size={12} />}
-          {copied ? "コピー済み" : "コピー"}
+          {copied ? "コピー済み ✓" : "コピーしてGeminiへ"}
         </button>
       </div>
+      {hasReplacement && (
+        <div className="px-4 py-1.5 bg-primary/5 border-b border-border">
+          <span className="text-xs text-primary/80">✦ テーマ「{theme}」を自動埋め込み済み</span>
+        </div>
+      )}
       <pre className="px-4 py-3 text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto">
-        {prompt.text}
+        {resolvedText}
       </pre>
     </div>
   );
@@ -1094,8 +1266,8 @@ function StepPageContent() {
                 </button>
                 {showPrompts && (
                   <div className="px-5 pb-5 space-y-3 border-t border-border">
-                    <p className="text-xs text-muted-foreground pt-4">以下のプロンプトをコピーしてGemini/ChatGPTに貼り付けてください。</p>
-                    {step.prompts.map((p, i) => <PromptCard key={i} prompt={p} />)}
+                    <p className="text-xs text-muted-foreground pt-4">以下のプロンプトをコピーしてGemini/ChatGPTに貼り付けてください。{weeklyTheme.theme && <span className="ml-1 text-primary/70">テーマ「{weeklyTheme.theme}」は自動埋め込み済みです。</span>}</p>
+                    {step.prompts.map((p, i) => <PromptCard key={i} prompt={p} theme={weeklyTheme.theme || undefined} />)}
                   </div>
                 )}
               </div>
