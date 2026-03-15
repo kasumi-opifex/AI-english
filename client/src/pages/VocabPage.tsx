@@ -6,11 +6,22 @@
 import { useState, useMemo } from "react";
 import { 
   BookOpen, Plus, Trash2, CheckCircle2, RotateCcw, 
-  Search, ChevronLeft, ChevronRight, X, Download
+  Search, ChevronLeft, ChevronRight, X, Download, Volume2
 } from "lucide-react";
+
 import NavBar from "@/components/NavBar";
 import { useApp, VocabWord } from "@/contexts/AppContext";
 import { toast } from "sonner";
+
+// Web Speech API 読み上げ関数
+function speak(text: string, lang = "en-US") {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = lang;
+  utter.rate = 0.9;
+  window.speechSynthesis.speak(utter);
+}
 
 // ============================================================
 // Flashcard Component
@@ -156,21 +167,25 @@ function FlashCard({ word, onMastered, onNext, onPrev, current, total, direction
 // ============================================================
 // Add Word Form
 // ============================================================
-function AddWordForm({ onClose, defaultTopic }: { onClose: () => void; defaultTopic: string }) {
+function AddWordForm({ onClose, defaultTopic, existingTopics }: { onClose: () => void; defaultTopic: string; existingTopics: string[] }) {
   const { addVocabWord } = useApp();
   const [english, setEnglish] = useState("");
   const [japanese, setJapanese] = useState("");
   const [example, setExample] = useState("");
-  const [topic, setTopic] = useState(defaultTopic || "");
+  const [exampleJa, setExampleJa] = useState("");
+  const [topicMode, setTopicMode] = useState<"existing" | "new">(existingTopics.length > 0 ? "existing" : "new");
+  const [topicSelect, setTopicSelect] = useState(defaultTopic || existingTopics[0] || "");
+  const [topicNew, setTopicNew] = useState("");
 
   const handleAdd = () => {
     if (!english.trim() || !japanese.trim()) {
       toast.error("英語と日本語は必須です");
       return;
     }
-    addVocabWord({ english: english.trim(), japanese: japanese.trim(), example: example.trim(), topic: topic.trim() || "一般" });
+    const finalTopic = topicMode === "new" ? (topicNew.trim() || "一般") : (topicSelect || "一般");
+    addVocabWord({ english: english.trim(), japanese: japanese.trim(), example: example.trim(), exampleJa: exampleJa.trim(), topic: finalTopic });
     toast.success(`「${english}」を追加しました`);
-    setEnglish(""); setJapanese(""); setExample("");
+    setEnglish(""); setJapanese(""); setExample(""); setExampleJa("");
   };
 
   return (
@@ -194,12 +209,36 @@ function AddWordForm({ onClose, defaultTopic }: { onClose: () => void; defaultTo
           <input value={japanese} onChange={e => setJapanese(e.target.value)} placeholder="例: 熱狂的な" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
         </div>
         <div>
-          <label className="text-xs text-muted-foreground mb-1 block">例文（任意）</label>
+          <label className="text-xs text-muted-foreground mb-1 block">例文（英語）</label>
           <input value={example} onChange={e => setExample(e.target.value)} placeholder="例: She is enthusiastic about..." className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
         </div>
         <div>
+          <label className="text-xs text-muted-foreground mb-1 block">例文日本語訳（任意）</label>
+          <input value={exampleJa} onChange={e => setExampleJa(e.target.value)} placeholder="例: 彼女は熱狂的に取り組んでいる" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+        </div>
+        <div className="sm:col-span-2">
           <label className="text-xs text-muted-foreground mb-1 block">トピック</label>
-          <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="例: コーヒー" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+          <div className="flex gap-2 items-center">
+            {existingTopics.length > 0 && (
+              <div className="flex bg-secondary/50 rounded p-0.5 border border-border text-xs">
+                <button
+                  onClick={() => setTopicMode("existing")}
+                  className={`px-2 py-1 rounded transition-all ${topicMode === "existing" ? "bg-background text-foreground" : "text-muted-foreground"}`}
+                >既存</button>
+                <button
+                  onClick={() => setTopicMode("new")}
+                  className={`px-2 py-1 rounded transition-all ${topicMode === "new" ? "bg-background text-foreground" : "text-muted-foreground"}`}
+                >新規</button>
+              </div>
+            )}
+            {topicMode === "existing" && existingTopics.length > 0 ? (
+              <select value={topicSelect} onChange={e => setTopicSelect(e.target.value)} className="flex-1 bg-background border border-border rounded px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent">
+                {existingTopics.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            ) : (
+              <input value={topicNew} onChange={e => setTopicNew(e.target.value)} placeholder="例: コーヒー文化" className="flex-1 bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+            )}
+          </div>
         </div>
       </div>
       <button onClick={handleAdd} className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition-all glow-lime">
@@ -321,9 +360,9 @@ function VocabPageContent() {
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
           {/* Add Form */}
-          {showAddForm && (
+            {showAddForm && (
             <div className="mb-6">
-              <AddWordForm onClose={() => setShowAddForm(false)} defaultTopic={progress.currentTopic} />
+              <AddWordForm onClose={() => setShowAddForm(false)} defaultTopic={progress.currentTopic} existingTopics={topics.filter(t => t !== "all")} />
             </div>
           )}
 
@@ -499,10 +538,17 @@ function WordListItem({ word, onToggleMastered, onRemove }: {
         </button>
 
         <div className="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <div>
+          <div className="flex items-center gap-1.5">
             <div className="font-bold text-sm text-foreground truncate" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               {word.english}
             </div>
+            <button
+              onClick={() => speak(word.english, "en-US")}
+              title="英語を読み上げ"
+              className="p-0.5 rounded text-muted-foreground hover:text-accent hover:bg-accent/10 transition-all flex-shrink-0"
+            >
+              <Volume2 size={12} />
+            </button>
           </div>
           <div>
             <div className="text-sm text-primary truncate">{word.japanese}</div>
@@ -519,6 +565,7 @@ function WordListItem({ word, onToggleMastered, onRemove }: {
             <button
               onClick={() => setExpanded(!expanded)}
               className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all"
+              title="例文を表示"
             >
               <RotateCcw size={13} />
             </button>
@@ -534,7 +581,19 @@ function WordListItem({ word, onToggleMastered, onRemove }: {
 
       {expanded && word.example && (
         <div className="px-4 pb-3 pt-0 border-t border-border/50">
-          <p className="text-xs text-muted-foreground italic font-mono leading-relaxed">{word.example}</p>
+          <div className="flex items-start gap-2">
+            <p className="text-xs text-muted-foreground italic font-mono leading-relaxed flex-1">{word.example}</p>
+            <button
+              onClick={() => speak(word.example, "en-US")}
+              title="例文を読み上げ"
+              className="p-1 rounded text-muted-foreground hover:text-accent hover:bg-accent/10 transition-all flex-shrink-0 mt-0.5"
+            >
+              <Volume2 size={12} />
+            </button>
+          </div>
+          {word.exampleJa && (
+            <p className="text-xs text-muted-foreground/70 mt-1 leading-relaxed">{word.exampleJa}</p>
+          )}
         </div>
       )}
     </div>

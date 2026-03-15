@@ -5,7 +5,7 @@
  * AI会話統合、Step7ロールプレイシチュエーション指定
  */
 import { useParams, Link } from "wouter";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { 
   ArrowLeft, ArrowRight, CheckCircle2, BookOpen, MessageSquare, 
   Layers, Volume2, Mic, RotateCcw, Zap, Copy, Check,
@@ -79,7 +79,7 @@ const stepData = [
     prompts: [
       {
         label: "語彙リスト生成プロンプト",
-        text: "トピック：[Step 1で選んだトピックを入力]\n\nこのトピックについて英語で会話するために必要な単語・フレーズを20個、以下の形式で出力してください：\n\n| 英語 | 日本語 | 例文（英語） |\n|------|--------|------------|",
+        text: "トピック：[Step 1で選んだトピックを入力]\n\nこのトピックについて英語で会話するために必要な単語・フレーズも20個、以下の形式で出力してください：\n\n| 英語 | 日本語 | 例文（英語） | 例文日本語訳 |\n|------|--------|------------|------------|\n\nヘッダ行は上記の通り、内容行は必ず4列全て埋めてください。マークダウン表形式のみで出力し、余分な説明文は不要です。",
       },
       {
         label: "レベル別単語追加プロンプト",
@@ -517,24 +517,24 @@ JSONのみ出力し、他のテキストは一切含めないでください。`
 }
 
 // Gemini出力のテキストをパースして単語配列に変換
-function parseBulkVocab(raw: string): Array<{english: string; japanese: string; example: string}> {
+function parseBulkVocab(raw: string): Array<{english: string; japanese: string; example: string; exampleJa: string}> {
   const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
-  const result: Array<{english: string; japanese: string; example: string}> = [];
+  const result: Array<{english: string; japanese: string; example: string; exampleJa: string}> = [];
   for (const line of lines) {
-    // マークダウン表形式: | 英語 | 日本語 | 例文 |
+    // マークダウン表形式: | 英語 | 日本語 | 例文 | 例文日本語訳 |
     if (line.startsWith("|")) {
       const cells = line.split("|").map(c => c.trim()).filter(Boolean);
       // ヘッダー行や区切り行をスキップ
       if (cells.length < 2) continue;
       if (cells[0].match(/^[-:]+$/) || cells[0].toLowerCase() === "英語" || cells[0].toLowerCase() === "english") continue;
-      result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "" });
+      result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "", exampleJa: cells[3] || "" });
       continue;
     }
-    // TSV形式: 英語\t日本語\t例文
+    // TSV形式: 英語\t日本語\t例文\t例文日本語訳
     if (line.includes("\t")) {
       const cells = line.split("\t").map(c => c.trim());
       if (cells.length >= 2) {
-        result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "" });
+        result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "", exampleJa: cells[3] || "" });
       }
       continue;
     }
@@ -542,13 +542,13 @@ function parseBulkVocab(raw: string): Array<{english: string; japanese: string; 
     if (line.includes(",")) {
       const cells = line.split(",").map(c => c.trim());
       if (cells.length >= 2 && /^[a-zA-Z]/.test(cells[0])) {
-        result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "" });
+        result.push({ english: cells[0] || "", japanese: cells[1] || "", example: cells[2] || "", exampleJa: cells[3] || "" });
       }
       continue;
     }
     // シンプルな英単語のみ（先頭が英字の場合）
     if (/^[a-zA-Z]/.test(line) && !line.includes(" ")) {
-      result.push({ english: line, japanese: "", example: "" });
+      result.push({ english: line, japanese: "", example: "", exampleJa: "" });
     }
   }
   return result.filter(w => w.english);
@@ -559,12 +559,21 @@ function VocabInput({ topic }: { topic: string }) {
   const [english, setEnglish] = useState("");
   const [japanese, setJapanese] = useState("");
   const [example, setExample] = useState("");
+  const [exampleJa, setExampleJa] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<{added: number; skipped: number} | null>(null);
+  // トピック切り替え
+  const existingTopics = useMemo(() => {
+    const s = new Set(vocabWords.map(w => w.topic).filter(Boolean));
+    return Array.from(s);
+  }, [vocabWords]);
+  const [topicMode, setTopicMode] = useState<"use" | "new">("use");
+  const [topicNew, setTopicNew] = useState("");
+  const effectiveTopic = topicMode === "new" ? (topicNew.trim() || "一般") : (topic || "一般");
   // 一括ペースト登録
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkText, setBulkText] = useState("");
-  const [bulkPreview, setBulkPreview] = useState<Array<{english: string; japanese: string; example: string}>>([]);
+  const [bulkPreview, setBulkPreview] = useState<Array<{english: string; japanese: string; example: string; exampleJa: string}>>([]);
   const [bulkParsed, setBulkParsed] = useState(false);
 
   const handleBulkParse = () => {
@@ -587,7 +596,7 @@ function VocabInput({ topic }: { topic: string }) {
       if (existingEnglish.has(w.english.toLowerCase().trim())) {
         skipped++;
       } else {
-        addVocabWord({ english: w.english.trim(), japanese: w.japanese.trim(), example: w.example.trim(), topic: topic || "一般" });
+        addVocabWord({ english: w.english.trim(), japanese: w.japanese.trim(), example: w.example.trim(), exampleJa: w.exampleJa?.trim() || "", topic: effectiveTopic });
         existingEnglish.add(w.english.toLowerCase().trim());
         added++;
       }
@@ -604,8 +613,8 @@ function VocabInput({ topic }: { topic: string }) {
       toast.error("英語と日本語は必須です");
       return;
     }
-    addVocabWord({ english: english.trim(), japanese: japanese.trim(), example: example.trim(), topic: topic || "一般" });
-    setEnglish(""); setJapanese(""); setExample("");
+    addVocabWord({ english: english.trim(), japanese: japanese.trim(), example: example.trim(), exampleJa: exampleJa.trim(), topic: effectiveTopic });
+    setEnglish(""); setJapanese(""); setExample(""); setExampleJa("");
     toast.success(`「${english}」を単語帳に追加しました`);
   };
 
@@ -631,7 +640,7 @@ function VocabInput({ topic }: { topic: string }) {
         if (existingEnglish.has(w.english.toLowerCase().trim())) {
           skipped++;
         } else {
-          addVocabWord({ english: w.english.trim(), japanese: w.japanese.trim(), example: w.example?.trim() || "", topic: topic || "一般" });
+          addVocabWord({ english: w.english.trim(), japanese: w.japanese.trim(), example: w.example?.trim() || "", exampleJa: "", topic: effectiveTopic });
           existingEnglish.add(w.english.toLowerCase().trim());
           added++;
         }
@@ -773,7 +782,7 @@ function VocabInput({ topic }: { topic: string }) {
           <Plus size={16} className="text-accent" />
           単語を手動で追加
         </h4>
-        <div className="grid sm:grid-cols-3 gap-3 mb-3">
+        <div className="grid sm:grid-cols-2 gap-3 mb-3">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">英語</label>
             <input value={english} onChange={e => setEnglish(e.target.value)} placeholder="例: enthusiastic" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
@@ -783,8 +792,36 @@ function VocabInput({ topic }: { topic: string }) {
             <input value={japanese} onChange={e => setJapanese(e.target.value)} placeholder="例: 熱狂的な" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">例文（任意）</label>
+            <label className="text-xs text-muted-foreground mb-1 block">例文（英語）</label>
             <input value={example} onChange={e => setExample(e.target.value)} placeholder="例: She is enthusiastic about..." className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">例文日本語訳（任意）</label>
+            <input value={exampleJa} onChange={e => setExampleJa(e.target.value)} placeholder="例: 彼女は熱狂的に取り組んでいる" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-xs text-muted-foreground mb-1 block">登録トピック</label>
+            <div className="flex gap-2 items-center">
+              {existingTopics.length > 0 && (
+                <div className="flex bg-secondary/50 rounded p-0.5 border border-border text-xs">
+                  <button
+                    onClick={() => setTopicMode("use")}
+                    className={`px-2 py-1 rounded transition-all ${topicMode === "use" ? "bg-background text-foreground" : "text-muted-foreground"}`}
+                  >現在のテーマ</button>
+                  <button
+                    onClick={() => setTopicMode("new")}
+                    className={`px-2 py-1 rounded transition-all ${topicMode === "new" ? "bg-background text-foreground" : "text-muted-foreground"}`}
+                  >新規トピック</button>
+                </div>
+              )}
+              {topicMode === "use" ? (
+                <span className="text-sm text-foreground/80 px-2 py-1.5 bg-background border border-border rounded flex-1">
+                  {topic || "一般"}
+                </span>
+              ) : (
+                <input value={topicNew} onChange={e => setTopicNew(e.target.value)} placeholder="例: コーヒー文化" className="flex-1 bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+              )}
+            </div>
           </div>
         </div>
         <button onClick={handleAdd} className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition-all">

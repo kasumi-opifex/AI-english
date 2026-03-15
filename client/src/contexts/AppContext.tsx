@@ -11,6 +11,7 @@ export interface VocabWord {
   english: string;
   japanese: string;
   example: string;
+  exampleJa: string;
   topic: string;
   createdAt: string;
   mastered: boolean;
