@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { FirebaseProvider } from "./contexts/FirebaseContext";
 import { AppProvider } from "./contexts/AppContext";
 import Home from "./pages/Home";
 import StepPage from "./pages/StepPage";
@@ -27,12 +28,14 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
-        <AppProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </AppProvider>
+        <FirebaseProvider>
+          <AppProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </AppProvider>
+        </FirebaseProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

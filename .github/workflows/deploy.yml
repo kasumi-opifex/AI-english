@@ -1,0 +1,72 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main        # main ブランチへのプッシュで自動デプロイ
+  workflow_dispatch: # 手動実行も可能
+
+# GitHub Pages へのデプロイに必要な権限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時デプロイを防ぐ（進行中のデプロイはキャンセルしない）
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # 1. リポジトリをチェックアウト
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Node.js セットアップ
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 3. pnpm セットアップ
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # 4. 依存関係インストール
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 5. GitHub Pages 用ビルド
+      #    REPO_NAME はリポジトリ名（例: english-learning-7steps）
+      #    ユーザー名.github.io リポジトリの場合は REPO_NAME="" にしてください
+      - name: Build for GitHub Pages
+        run: pnpm vite build --config vite.config.ghpages.ts
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+
+      # 6. SPA用 404.html を作成（React Router のクライアントサイドルーティング対応）
+      - name: Create 404.html for SPA routing
+        run: cp dist/gh-pages/index.html dist/gh-pages/404.html
+
+      # 7. GitHub Pages アーティファクトをアップロード
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "dist/gh-pages"
+
+      # 8. GitHub Pages にデプロイ
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

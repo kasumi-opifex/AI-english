@@ -4,6 +4,7 @@
  * グロー効果、ターミナル風UI
  */
 import { Link, useLocation } from "wouter";
+import AuthBanner from "./AuthBanner";
 import { BookOpen, Home, Layers, Menu, X, Settings, Flame } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/contexts/AppContext";
@@ -136,6 +137,7 @@ export default function NavBar() {
         </div>
       </div>
 
+      <AuthBanner />
       {/* Mobile Menu */}
       {mobileOpen && (
         <div className="md:hidden glass-panel border-t border-border/50 px-4 py-3">
