@@ -1,17 +1,20 @@
-/* 
+/*
  * DESIGN: AIコックピット — テック・フューチャリスト
  * 各ステップの詳細ガイドページ
  * ターミナル風プロンプト表示、WPM計測、インタラクティブ要素
+ * AI会話統合、Step7ロールプレイシチュエーション指定
  */
 import { useParams, Link } from "wouter";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   ArrowLeft, ArrowRight, CheckCircle2, BookOpen, MessageSquare, 
   Layers, Volume2, Mic, RotateCcw, Zap, Copy, Check,
-  Play, Square, Timer, Plus, ChevronDown, ChevronUp, ExternalLink
+  Play, Square, Timer, Plus, ChevronDown, ChevronUp, ExternalLink,
+  Bot, Pencil, X
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import { useApp } from "@/contexts/AppContext";
+import AiChat from "@/components/AiChat";
 import { toast } from "sonner";
 
 // ============================================================
@@ -51,6 +54,9 @@ const stepData = [
       "仕事・趣味・日常の3カテゴリからそれぞれ1つずつ選ぶのがおすすめ",
     ],
     hasTopicInput: true,
+    aiSystemPrompt: "あなたは英語学習をサポートするAIアシスタントです。ユーザーが日本語で日常の出来事や趣味を話してくれます。話を聞いて整理し、英語でも話せるようになりたいトピックを提案してください。親しみやすく、励ましながら会話してください。",
+    aiInitialMessage: "こんにちは！今日あったことや最近ハマっていることを、日本語で自由に話してください。英語で話したいトピックを一緒に見つけましょう！",
+    aiPlaceholder: "今日あったことや趣味について話してください...",
   },
   {
     id: 2,
@@ -86,6 +92,9 @@ const stepData = [
       "このアプリの単語帳機能を使って登録・管理しよう",
     ],
     hasVocabInput: true,
+    aiSystemPrompt: "あなたは英語学習をサポートするAIアシスタントです。ユーザーのトピックに合わせた英単語・フレーズリストを作成してください。英語・日本語・例文の3列形式で出力し、実際の会話で使えるものを優先してください。",
+    aiInitialMessage: "語彙リストを作成しましょう！学習したいトピックを教えてください。そのトピックで会話するために必要な単語・フレーズを20語リストアップします。",
+    aiPlaceholder: "トピックを教えてください（例：コーヒー、旅行、映画）...",
   },
   {
     id: 3,
@@ -98,31 +107,32 @@ const stepData = [
     toolUrl: "https://gemini.google.com",
     toolColor: "cyan",
     description: "決めたトピックについてGeminiにレベル別の英文を書かせる。WPM（1分間の読書スピード）を測定し、ネイティブのスピード（150〜200WPM）を目指して繰り返し読む。",
-    purpose: "同じトピックの英文を繰り返し読むことで、語彙・文法・内容が定着する。WPM測定により、読書速度の客観的な向上を実感できる。",
+    purpose: "同じトピックを繰り返し読むことで、語彙と文脈を同時に定着させる「ナロー・リーディング」メソッド。WPM測定で客観的な進捗を把握する。",
     steps: [
-      "Geminiに「[トピック]について、A2レベルの英文を150〜200語で書いてください」と依頼する",
-      "書かれた英文の単語数を確認する",
-      "タイマーをスタートし、英文を読み終わったら止める",
-      "WPM = 単語数 ÷ 読んだ時間（分）で計算する",
-      "目標：150〜200WPM（ネイティブの自然な読書速度）",
-      "同じ英文を繰り返し読んでWPMを上げていく",
+      "Geminiに「[トピック]について、初級・中級・上級レベルの英文をそれぞれ100〜150語で書いてください」と依頼する",
+      "初級レベルから読み始め、WPM計測ツールで読書速度を測定する",
+      "同じ英文を繰り返し読み、WPMが上がるまで練習する",
+      "150WPM以上になったら次のレベルに進む",
     ],
     prompts: [
       {
-        label: "レベル別英文生成プロンプト（A2）",
-        text: "トピック：[トピックを入力]\n\nこのトピックについて、英語学習者向け（A2レベル）の英文を150〜200語で書いてください。使用する単語は中学英語レベルを中心にしてください。文末に単語数を記載してください。",
+        label: "レベル別英文生成プロンプト",
+        text: "トピック：[トピックを入力]\n\n以下の3レベルで英文を書いてください：\n\n【初級 (A2)】100語程度：簡単な語彙・短文\n【中級 (B1)】120語程度：一般的な語彙・複文\n【上級 (B2)】150語程度：豊かな語彙・複雑な構文",
       },
       {
-        label: "レベルアップ版（B1）",
-        text: "同じトピックで、B1レベル（TOEIC 500〜600点相当）の英文を200〜250語で書いてください。より自然な表現や慣用句を含めてください。",
+        label: "リーディング練習プロンプト",
+        text: "上記の英文について、以下を教えてください：\n1. 難しい単語・表現の解説\n2. 文章の要点3つ\n3. 音読する際のポイント",
       },
     ],
     tips: [
-      "最初は遅くてもOK。同じ英文を3〜5回読むことで速度が上がる",
-      "音読しながら読むとリスニング力も同時に鍛えられる",
-      "WPMが150を超えたら次のレベルの英文に挑戦しよう",
+      "最初は遅くてOK。スムーズに読めるようになってから速度を上げよう",
+      "意味を理解しながら読む「意味読み」を意識する",
+      "同じ英文を最低3回は繰り返し読もう",
     ],
     hasWPM: true,
+    aiSystemPrompt: "あなたは英語リーディング指導のAIアシスタントです。ユーザーのトピックに合わせたレベル別英文（初級・中級・上級）を作成し、WPM向上のためのアドバイスをしてください。",
+    aiInitialMessage: "ナロー・リーディングの英文を作成します！学習トピックと希望レベル（初級/中級/上級）を教えてください。",
+    aiPlaceholder: "トピックとレベルを教えてください...",
   },
   {
     id: 4,
@@ -130,42 +140,43 @@ const stepData = [
     phaseNum: "01",
     icon: Volume2,
     title: "リスニング",
-    subtitle: "音の繋がり（リンキング）を確認",
+    subtitle: "音の繋がりを確認",
     tool: "Gemini",
     toolUrl: "https://gemini.google.com",
     toolColor: "cyan",
     description: "生成した英文をAIに読み上げさせる。速度を0.5〜0.8倍に落とし、「Check it out → チェキラ」のようなリンキング（音の繋がり）を耳で確認する。",
-    purpose: "ネイティブの発音では単語と単語が繋がって聞こえる（リンキング）。スローモーションで聞くことで、この音の変化を耳で捉える訓練をする。",
+    purpose: "ネイティブの発音では単語が繋がって聞こえる「リンキング」が多発する。スロー再生で音の繋がりを意識的に確認することで、リスニング力と発音を同時に鍛える。",
     steps: [
-      "Step 3で生成した英文をGeminiのTTS（音声読み上げ）機能で再生する",
-      "まず通常速度（1.0倍）で聞き、全体の流れを把握する",
-      "次に0.7倍速に落として、単語の繋がりを意識しながら聞く",
-      "リンキングが起きている箇所をメモする（例：「want to → wanna」「going to → gonna」）",
-      "聞こえた音を真似して声に出す（シャドーイング）",
+      "Step 3で生成した英文をGeminiに読み上げさせる（またはテキスト読み上げツールを使用）",
+      "最初は0.5倍速で聞き、音の繋がりを確認する",
+      "0.7倍速 → 0.8倍速 → 通常速度と段階的に上げていく",
+      "リンキングが起きている箇所をメモし、自分でも発音してみる",
     ],
     prompts: [
       {
         label: "リンキング解説プロンプト",
-        text: "以下の英文のリンキング（音の繋がり）が起きている箇所を全て指摘し、実際にどう聞こえるか（カタカナ表記）で教えてください：\n\n[Step 3で生成した英文を貼り付け]",
+        text: "以下の英文を読み上げる際のリンキング（音の繋がり）を解説してください。特に「子音+母音」「同じ子音の連続」「消える音」のパターンを教えてください：\n\n[英文を入力]",
       },
       {
-        label: "シャドーイング用プロンプト",
-        text: "この英文をシャドーイング練習用に、スラッシュ（/）で意味のまとまりごとに区切ってください。また、特に注意すべき発音のポイントも教えてください。",
+        label: "発音練習プロンプト",
+        text: "以下の英文について、日本人が発音しにくい箇所と、その練習方法を教えてください：\n\n[英文を入力]",
       },
     ],
     tips: [
-      "「Check it out」→「チェキラウ」のように、繋がって聞こえる部分を探そう",
-      "最初は0.5倍速から始めて、慣れたら0.8倍速に上げていく",
-      "同じ英文を最低5回は聞くことで耳が慣れてくる",
+      "「Check it out」→「チェキラウ」のように、繋がりを日本語で書いてみると覚えやすい",
+      "シャドーイング（音声に合わせて声に出す）も効果的",
+      "毎日5分でも継続することが大切",
     ],
     linkingExamples: [
-      { original: "Check it out", linked: "チェキラウ", rule: "子音+母音のリンキング" },
-      { original: "Want to", linked: "ウォナ", rule: "縮約形（Reduction）" },
-      { original: "Going to", linked: "ゴナ", rule: "縮約形（Reduction）" },
-      { original: "Did you", linked: "ディジュ", rule: "同化（Assimilation）" },
-      { original: "Could you", linked: "クジュ", rule: "同化（Assimilation）" },
+      { original: "Check it out", linked: "チェキラウ", rule: "子音+母音" },
       { original: "What are you", linked: "ワラユ", rule: "連続リンキング" },
+      { original: "I want to", linked: "アイウォナ", rule: "弱形" },
+      { original: "Did you", linked: "ヂジュ", rule: "同化" },
+      { original: "going to", linked: "ゴナ", rule: "縮約" },
     ],
+    aiSystemPrompt: "あなたは英語発音・リスニング指導のAIアシスタントです。リンキング（音の繋がり）、弱形、同化などの音声変化を分かりやすく解説してください。英文のリンキング箇所を具体的に示し、日本人学習者が理解しやすいよう日本語で説明してください。",
+    aiInitialMessage: "リンキング（音の繋がり）を学習しましょう！練習したい英文を入力してください。リンキングが起きる箇所を解説します。",
+    aiPlaceholder: "練習したい英文を入力してください...",
   },
   {
     id: 5,
@@ -175,34 +186,35 @@ const stepData = [
     title: "1分間スピーチ",
     subtitle: "口から出す練習",
     tool: "スマホ録音",
-    toolUrl: null,
+    toolUrl: "",
     toolColor: "lime",
-    description: "スマホに向かって、そのトピックについて1分間英語で話し、録音・文字起こしする。「知っている」状態から「口から出す」負荷を脳にかける。",
-    purpose: "インプットした知識を実際に「話す」ことで、脳に「アウトプット回路」を作る。録音することで客観的に自分の英語を評価でき、文字起こしで改善点を発見できる。",
+    description: "スマホに向かってそのトピックについて1分間英語で話し、録音・文字起こしする。「知っている」状態から「口から出す」負荷を脳にかける。",
+    purpose: "「知っている」と「話せる」は全く別物。1分間スピーチを録音することで、自分の弱点（語彙不足・文法ミス・詰まる箇所）を客観的に把握できる。",
     steps: [
-      "Step 1〜4で学んだトピックについて、1分間話す内容を頭の中で整理する（メモ不可）",
-      "スマホのボイスメモアプリを起動し、録音を開始する",
-      "タイマーを1分にセットして、英語で話し続ける（途中で止まっても続ける）",
-      "録音した音声をGeminiやChatGPTに文字起こしさせる",
-      "文字起こしを読んで、言えなかった表現・間違えた文法をメモする",
-      "同じトピックでもう一度話し、改善を確認する",
+      "スマホの録音アプリを開き、タイマーをセットする",
+      "1分間、トピックについて英語で話し続ける（途中で止まっても続ける）",
+      "録音を聞き返し、詰まった箇所・間違えた箇所をメモする",
+      "AIに文字起こしした内容を添削してもらう",
     ],
     prompts: [
       {
-        label: "文字起こし＋フィードバックプロンプト",
-        text: "以下は私の1分間英語スピーチの文字起こしです。\n\n[文字起こしを貼り付け]\n\n以下の点でフィードバックをください：\n1. 文法の誤り（修正案付き）\n2. より自然な表現への言い換え提案\n3. 良かった点\n4. 次回挑戦すべき表現",
+        label: "スピーチ添削プロンプト",
+        text: "以下は私が1分間英語でスピーチした内容の文字起こしです。文法・語彙・表現を添削し、より自然な英語に直してください。また、改善点を3つ教えてください：\n\n[文字起こし内容を入力]",
       },
       {
         label: "スピーチ構成プロンプト",
-        text: "トピック：[トピックを入力]\n\nこのトピックで1分間（約120〜150語）のスピーチ構成を作ってください。イントロ・本題・まとめの3部構成で、私が自分の言葉で話せるようにポイントだけ箇条書きにしてください。",
+        text: "トピック：[トピックを入力]\n\n1分間スピーチの構成を教えてください。イントロ・本題・まとめの3部構成で、各パートで使えるフレーズも含めてください。",
       },
     ],
     tips: [
-      "完璧を目指さない。「話し続けること」が最重要",
-      "「えーと」の代わりに「Well...」「Let me think...」を使う練習をしよう",
-      "録音を聞き直すのは勇気がいるが、最大の学習機会になる",
+      "最初は詰まっても止まらないことが大切。「um」「well」「you know」などのフィラーを使おう",
+      "録音を聞き返すのは勇気がいるが、最も効果的な上達法",
+      "毎日同じトピックで話すと、どんどん流暢になる",
     ],
     hasTimer: true,
+    aiSystemPrompt: "あなたは英語スピーキング指導のAIアシスタントです。ユーザーのスピーチ内容を添削し、より自然な英語表現を提案してください。また、1分間スピーチの構成や使えるフレーズも教えてください。励ましながら、具体的なフィードバックを提供してください。",
+    aiInitialMessage: "1分間スピーチの練習をサポートします！録音した内容を文字起こしして貼り付けてください。添削と改善アドバイスをします。または、スピーチのネタや構成のアドバイスが必要な場合はトピックを教えてください。",
+    aiPlaceholder: "スピーチの文字起こしを貼り付けるか、トピックを入力してください...",
   },
   {
     id: 6,
@@ -215,30 +227,32 @@ const stepData = [
     toolUrl: "https://gemini.google.com",
     toolColor: "lime",
     description: "Geminiにスピーチ内容を「セリフなしの4コマ漫画」に画像生成させる。日本語を介さず、絵のイメージから直接英語を出す回路を作る。同じ内容を3分→2分→1分と時間を縮めて話す。",
-    purpose: "「絵を見て英語で説明する」ことで、日本語を経由しない英語思考回路を構築する。時間制限を設けることで、流暢さ（fluency）を鍛える。",
+    purpose: "絵を見て直接英語で話す練習は、日本語→英語の翻訳回路を使わずに英語を出力する力を鍛える。時間を縮めることで、情報の取捨選択力も向上する。",
     steps: [
       "Step 5のスピーチ内容をGeminiに伝え、「セリフなしの4コマ漫画」として画像生成を依頼する",
-      "生成された4コマ漫画を見ながら、3分間で英語でストーリーを語る（録音）",
-      "同じ4コマを見ながら、今度は2分間で語る",
-      "最後に1分間で語る（内容を圧縮・要約する力が身につく）",
-      "3回の録音を比較して、どう変化したか確認する",
+      "生成された4コマ漫画を見ながら、3分間で内容を英語で説明する",
+      "同じ絵を見ながら、2分間で説明する（情報を絞る）",
+      "最後に1分間で核心だけを話す",
     ],
     prompts: [
       {
         label: "4コマ漫画生成プロンプト",
-        text: "以下のストーリーを「セリフなし・テキストなし」の4コマ漫画として画像生成してください。シンプルなイラスト風で、各コマに何が起きているかが絵だけで伝わるようにしてください：\n\n[Step 5のスピーチ内容を要約して入力]",
+        text: "以下のスピーチ内容を、セリフなしの4コマ漫画として画像生成してください。シンプルなイラストで、各コマが話の流れを表すようにしてください：\n\n[スピーチ内容を入力]",
       },
       {
         label: "リテリング評価プロンプト",
-        text: "以下は4コマ漫画を見ながらの私の英語リテリング（[3分/2分/1分]版）の文字起こしです。\n\n[文字起こしを貼り付け]\n\n流暢さ・語彙の豊富さ・文法の正確さの観点でフィードバックをください。",
+        text: "私が絵を見ながら英語でリテリングした内容を評価してください。以下の観点で：\n1. 情報の取捨選択は適切か\n2. 使った語彙・表現は適切か\n3. 流暢さはどうか\n\n[リテリング内容を入力]",
       },
     ],
     tips: [
-      "絵を見て「これは英語でどう言う？」と考える習慣が英語思考の第一歩",
-      "3分版は詳しく、1分版は要点だけ。情報の取捨選択力も鍛えられる",
-      "同じ絵を使って毎日練習すると、流暢さが急速に向上する",
+      "3分版では詳しく、1分版では核心だけを話す意識を持つ",
+      "絵を見て「これは英語でなんと言う？」と考える習慣をつける",
+      "毎回同じ絵を使うことで、表現の引き出しが増える",
     ],
-    retellingTimers: [180, 120, 60],
+    retellingTimers: true,
+    aiSystemPrompt: "あなたは英語スピーキング指導のAIアシスタントです。3-2-1リテリング練習をサポートします。ユーザーのスピーチ内容から4コマ漫画のシナリオを作成したり、リテリングの評価・フィードバックを提供してください。",
+    aiInitialMessage: "3-2-1リテリングの練習をサポートします！Step 5のスピーチ内容を教えてください。4コマ漫画のシナリオを作成します。または、リテリングした内容を貼り付けてフィードバックを受けることもできます。",
+    aiPlaceholder: "スピーチ内容を入力するか、リテリングした内容を貼り付けてください...",
   },
   {
     id: 7,
@@ -246,18 +260,18 @@ const stepData = [
     phaseNum: "02",
     icon: Zap,
     title: "ロールプレイ",
-    subtitle: "仕上げ・実践対話",
+    subtitle: "仕上げ",
     tool: "ChatGPT",
     toolUrl: "https://chat.openai.com",
     toolColor: "lime",
     description: "ChatGPTの音声モードを使用。特定のシチュエーション（カフェの店員と客など）になりきって会話する。実践的な対話スピードと、予期せぬ返しへの対応力を磨く。",
     purpose: "実際の会話では「予期せぬ返し」への対応が最も難しい。ChatGPTの音声モードでリアルタイム対話を練習することで、瞬時に反応する力を鍛える。",
     steps: [
+      "シチュエーションを選択またはカスタム入力する",
       "ChatGPTを開き、音声モード（Voice Mode）に切り替える",
-      "「You are a [役割]. I am a [自分の役割]. Let's have a conversation about [シチュエーション].」と設定する",
+      "生成されたプロンプトをChatGPTに貼り付けてロールプレイを開始する",
       "5〜10分間、ロールプレイを続ける",
       "会話が終わったら「Please give me feedback on my English」と依頼する",
-      "フィードバックをもとに、同じシチュエーションで再度挑戦する",
     ],
     prompts: [
       {
@@ -279,13 +293,17 @@ const stepData = [
       "毎日5分のロールプレイで、1ヶ月後には別人のように話せるようになる",
     ],
     scenarios: [
-      { name: "カフェ注文", level: "初級", emoji: "☕" },
-      { name: "ショッピング", level: "初級", emoji: "🛍️" },
-      { name: "ホテルチェックイン", level: "中級", emoji: "🏨" },
-      { name: "道案内", level: "中級", emoji: "🗺️" },
-      { name: "ビジネス会議", level: "上級", emoji: "💼" },
-      { name: "医療・緊急時", level: "上級", emoji: "🏥" },
+      { name: "カフェ注文", level: "初級", emoji: "☕", aiRole: "friendly barista at a busy café", userRole: "customer", context: "ordering coffee and chatting" },
+      { name: "ショッピング", level: "初級", emoji: "🛍️", aiRole: "helpful store clerk at a clothing store", userRole: "customer", context: "shopping for clothes" },
+      { name: "ホテルチェックイン", level: "中級", emoji: "🏨", aiRole: "hotel receptionist at a 5-star hotel in London", userRole: "Japanese tourist", context: "checking in and asking about hotel facilities" },
+      { name: "道案内", level: "中級", emoji: "🗺️", aiRole: "friendly local resident", userRole: "tourist who is lost", context: "asking for directions to a famous landmark" },
+      { name: "ビジネス会議", level: "上級", emoji: "💼", aiRole: "US client visiting for a business meeting", userRole: "Japanese host", context: "business discussion and negotiation" },
+      { name: "医療・緊急時", level: "上級", emoji: "🏥", aiRole: "doctor at a hospital", userRole: "patient with symptoms", context: "explaining symptoms and getting medical advice" },
     ],
+    aiSystemPrompt: "あなたは英語ロールプレイ練習のAIアシスタントです。ユーザーが指定したシチュエーションでロールプレイの準備をサポートします。適切なプロンプトを生成したり、ロールプレイ後のフィードバックを提供してください。",
+    aiInitialMessage: "ロールプレイの準備をしましょう！シチュエーションを選択するか、カスタムシチュエーションを入力してください。ChatGPTに貼り付けるプロンプトを生成します。",
+    aiPlaceholder: "シチュエーションを説明するか、ロールプレイ後のフィードバックを求めてください...",
+    hasRoleplay: true,
   },
 ];
 
@@ -424,30 +442,25 @@ function SpeechTimer({ duration, label }: { duration: number; label: string }) {
   }, []);
 
   const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
-  const progress = ((duration - seconds) / duration) * 100;
+  const pct = (seconds / duration) * 100;
 
   return (
-    <div className="bg-background/60 border border-border rounded-lg p-4 flex items-center gap-4">
-      <div className="relative w-16 h-16 flex-shrink-0">
-        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-          <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" className="text-secondary" />
-          <circle 
-            cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
-            className="text-accent transition-all"
-            strokeDasharray={`${2 * Math.PI * 28}`}
-            strokeDashoffset={`${2 * Math.PI * 28 * (1 - progress / 100)}`}
-            strokeLinecap="round"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xs font-mono font-bold text-foreground">{formatTime(seconds)}</span>
-        </div>
+    <div className="bg-background/60 border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{label}</span>
+        <span className={`text-2xl font-bold font-mono ${seconds === 0 ? 'text-accent' : isRunning ? 'text-primary' : 'text-foreground'}`}>
+          {formatTime(seconds)}
+        </span>
       </div>
-      <div className="flex-1">
-        <div className="font-bold text-sm mb-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{label}</div>
-        <div className="text-xs text-muted-foreground mb-2">{duration / 60}分間で話す</div>
+      <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-3">
+        <div 
+          className={`h-full rounded-full transition-all ${seconds === 0 ? 'bg-accent' : 'bg-primary'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="flex gap-2">
         {!isRunning ? (
-          <button onClick={start} className="flex items-center gap-1.5 bg-accent text-accent-foreground px-3 py-1.5 rounded text-xs font-semibold hover:opacity-90 transition-all">
+          <button onClick={start} className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded text-xs font-semibold hover:opacity-90 transition-all">
             <Play size={12} /> スタート
           </button>
         ) : (
@@ -536,14 +549,182 @@ function PromptCard({ prompt }: { prompt: { label: string; text: string } }) {
 }
 
 // ============================================================
+// Roleplay Scenario Selector (Step 7)
+// ============================================================
+type ScenarioType = {
+  name: string;
+  level: string;
+  emoji: string;
+  aiRole: string;
+  userRole: string;
+  context: string;
+};
+
+function RoleplaySelector({ scenarios }: { scenarios: ScenarioType[] }) {
+  const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
+  const [customMode, setCustomMode] = useState(false);
+  const [customAiRole, setCustomAiRole] = useState("");
+  const [customUserRole, setCustomUserRole] = useState("");
+  const [customContext, setCustomContext] = useState("");
+  const [generatedPrompt, setGeneratedPrompt] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const generatePrompt = (sc: ScenarioType | null, isCustom: boolean) => {
+    if (isCustom) {
+      if (!customAiRole || !customUserRole) return;
+      const prompt = `You are ${customAiRole}. I am ${customUserRole}. ${customContext ? `We are ${customContext}.` : ""} Please start the conversation naturally. If I make grammar mistakes, continue the conversation naturally but correct me gently at the end of each exchange. Keep the conversation going for about 5-10 minutes. After our conversation, please give me detailed feedback on my English.`;
+      setGeneratedPrompt(prompt);
+    } else if (sc) {
+      const prompt = `You are ${sc.aiRole}. I am ${sc.userRole}. We are ${sc.context}. Please start the conversation naturally. If I make grammar mistakes, continue the conversation naturally but correct me gently at the end of each exchange. Keep the conversation going for about 5-10 minutes. After our conversation, please give me detailed feedback on my English.`;
+      setGeneratedPrompt(prompt);
+    }
+  };
+
+  const handleSelectScenario = (sc: ScenarioType) => {
+    setSelectedScenario(sc);
+    setCustomMode(false);
+    generatePrompt(sc, false);
+  };
+
+  const handleGenerateCustom = () => {
+    generatePrompt(null, true);
+  };
+
+  const handleCopy = () => {
+    if (!generatedPrompt) return;
+    navigator.clipboard.writeText(generatedPrompt);
+    setCopied(true);
+    toast.success("プロンプトをコピーしました");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="glass-panel rounded-xl p-5 border border-accent/30">
+      <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider mb-4 font-mono flex items-center gap-2">
+        <Zap size={14} className="text-accent" />
+        ROLEPLAY SCENARIO
+      </h2>
+
+      {/* Preset Scenarios */}
+      <div className="mb-4">
+        <p className="text-xs text-muted-foreground mb-3">プリセットシチュエーションを選択：</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {scenarios.map((sc, i) => (
+            <button
+              key={i}
+              onClick={() => handleSelectScenario(sc)}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                selectedScenario?.name === sc.name && !customMode
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-border bg-background/60 text-foreground hover:border-accent/40"
+              }`}
+            >
+              <div className="text-xl mb-1">{sc.emoji}</div>
+              <div className="text-xs font-semibold">{sc.name}</div>
+              <div className={`text-xs mt-1 px-1.5 py-0.5 rounded-full inline-block ${
+                sc.level === "初級" ? "bg-primary/20 text-primary" :
+                sc.level === "中級" ? "bg-amber-500/20 text-amber-400" :
+                "bg-destructive/20 text-destructive"
+              }`}>{sc.level}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Custom Scenario */}
+      <div className="mb-4">
+        <button
+          onClick={() => { setCustomMode(!customMode); setSelectedScenario(null); setGeneratedPrompt(""); }}
+          className={`flex items-center gap-2 text-sm font-medium transition-all px-3 py-2 rounded-lg border ${
+            customMode ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+          }`}
+        >
+          <Pencil size={13} />
+          カスタムシチュエーションを作成
+        </button>
+      </div>
+
+      {customMode && (
+        <div className="bg-secondary/30 rounded-lg p-4 border border-border mb-4 space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">AIの役割 *</label>
+            <input
+              value={customAiRole}
+              onChange={e => setCustomAiRole(e.target.value)}
+              placeholder="例: a friendly barista at a café in Tokyo"
+              className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">あなたの役割 *</label>
+            <input
+              value={customUserRole}
+              onChange={e => setCustomUserRole(e.target.value)}
+              placeholder="例: a customer who wants to order a special drink"
+              className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">シチュエーションの詳細（任意）</label>
+            <input
+              value={customContext}
+              onChange={e => setCustomContext(e.target.value)}
+              placeholder="例: having a conversation about the best coffee brewing methods"
+              className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+          <button
+            onClick={handleGenerateCustom}
+            disabled={!customAiRole || !customUserRole}
+            className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-40 glow-lime"
+          >
+            <Zap size={13} /> プロンプトを生成
+          </button>
+        </div>
+      )}
+
+      {/* Generated Prompt */}
+      {generatedPrompt && (
+        <div className="bg-background/60 border border-accent/30 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-secondary/30">
+            <span className="text-xs text-accent font-mono font-semibold">
+              ✓ ChatGPTに貼り付けるプロンプト
+            </span>
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 text-xs bg-accent text-accent-foreground px-3 py-1 rounded hover:opacity-90 transition-all"
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+              {copied ? "コピー済み" : "コピー"}
+            </button>
+          </div>
+          <pre className="px-4 py-3 text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed">
+            {generatedPrompt}
+          </pre>
+          <div className="px-4 py-3 border-t border-border bg-secondary/20">
+            <a href="https://chat.openai.com" target="_blank" rel="noopener noreferrer">
+              <button className="flex items-center gap-2 text-xs text-emerald-400 border border-emerald-500/40 px-3 py-1.5 rounded hover:bg-emerald-500/10 transition-all">
+                <ExternalLink size={12} />
+                ChatGPTを開いて貼り付ける
+              </button>
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // Main Step Page
 // ============================================================
 function StepPageContent() {
   const params = useParams<{ id: string }>();
   const stepId = parseInt(params.id || "1");
   const step = stepData.find(s => s.id === stepId);
-  const { progress, updateProgress } = useApp();
+  const { progress, updateProgress, recordActivity } = useApp();
   const [showPrompts, setShowPrompts] = useState(false);
+  const [showAiChat, setShowAiChat] = useState(false);
   const [topicInput, setTopicInput] = useState(progress.currentTopic || "");
 
   if (!step) {
@@ -567,6 +748,7 @@ function StepPageContent() {
     const key = `step${step.id}Completed` as keyof typeof progress;
     updateProgress({ [key]: !isCompleted } as Partial<typeof progress>);
     if (!isCompleted) {
+      recordActivity();
       toast.success(`Step ${step.id} 完了！`);
     }
   };
@@ -612,7 +794,19 @@ function StepPageContent() {
                 </h1>
                 <p className="text-muted-foreground text-sm">{step.subtitle}</p>
               </div>
-              <div className="flex-shrink-0 flex items-center gap-2">
+              <div className="flex-shrink-0 flex items-center gap-2 flex-wrap">
+                {/* AI Chat Toggle */}
+                <button
+                  onClick={() => setShowAiChat(!showAiChat)}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border transition-all ${
+                    showAiChat
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                  }`}
+                >
+                  <Bot size={12} />
+                  {showAiChat ? "AIを閉じる" : "AIに聞く"}
+                </button>
                 {step.toolUrl && (
                   <a href={step.toolUrl} target="_blank" rel="noopener noreferrer">
                     <button className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border transition-all ${
@@ -729,23 +923,22 @@ function StepPageContent() {
                 </div>
               )}
 
-              {/* Scenarios (Step 7) */}
-              {step.scenarios && (
-                <div className="glass-panel rounded-xl p-5 border border-border">
-                  <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider mb-4 font-mono">SCENARIOS</h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {step.scenarios.map((sc, i) => (
-                      <div key={i} className="bg-background/60 border border-border rounded-lg p-3 text-center">
-                        <div className="text-2xl mb-1">{sc.emoji}</div>
-                        <div className="text-sm font-semibold text-foreground mb-1">{sc.name}</div>
-                        <div className={`text-xs px-2 py-0.5 rounded-full inline-block ${
-                          sc.level === "初級" ? "bg-primary/20 text-primary" :
-                          sc.level === "中級" ? "bg-amber-500/20 text-amber-400" :
-                          "bg-destructive/20 text-destructive"
-                        }`}>{sc.level}</div>
-                      </div>
-                    ))}
-                  </div>
+              {/* Roleplay Scenario Selector (Step 7) */}
+              {step.hasRoleplay && step.scenarios && (
+                <RoleplaySelector scenarios={step.scenarios as ScenarioType[]} />
+              )}
+
+              {/* AI Chat Panel */}
+              {showAiChat && (
+                <div className="h-[500px]">
+                  <AiChat
+                    title={`Step ${step.id} AI アシスタント`}
+                    systemPrompt={step.aiSystemPrompt}
+                    initialMessage={step.aiInitialMessage}
+                    placeholder={step.aiPlaceholder}
+                    aiOverride={step.id === 7 ? "chatgpt" : "gemini"}
+                    onActivity={recordActivity}
+                  />
                 </div>
               )}
 
@@ -787,6 +980,19 @@ function StepPageContent() {
                 ) : (
                   <><CheckCircle2 size={16} /> Step {step.id} を完了にする</>
                 )}
+              </button>
+
+              {/* AI Chat Quick Button */}
+              <button
+                onClick={() => setShowAiChat(!showAiChat)}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all border ${
+                  showAiChat
+                    ? "bg-accent/10 border-accent/40 text-accent"
+                    : "bg-secondary/30 border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                }`}
+              >
+                <Bot size={16} />
+                {showAiChat ? "AIチャットを閉じる" : "AIチャットを開く"}
               </button>
 
               {/* Tips */}

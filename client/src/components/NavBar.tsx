@@ -4,14 +4,14 @@
  * グロー効果、ターミナル風UI
  */
 import { Link, useLocation } from "wouter";
-import { BookOpen, Home, Layers, Menu, X } from "lucide-react";
+import { BookOpen, Home, Layers, Menu, X, Settings, Flame } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/contexts/AppContext";
 
 export default function NavBar() {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { vocabWords, progress } = useApp();
+  const { vocabWords, progress, streak, weeklyTheme } = useApp();
 
   const completedSteps = [
     progress.step1Completed,
@@ -86,11 +86,35 @@ export default function NavBar() {
                 )}
               </button>
             </Link>
+            <Link href="/settings">
+              <button className={`flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-all ${
+                location === "/settings" 
+                  ? "bg-secondary/60 text-foreground border border-border" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+              }`}>
+                <Settings size={15} />
+                設定
+              </button>
+            </Link>
           </div>
 
           {/* Stats + Mobile Menu */}
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
+              {/* Streak */}
+              {streak.currentStreak > 0 && (
+                <div className="flex items-center gap-1 bg-orange-500/10 border border-orange-500/30 rounded-full px-2.5 py-1">
+                  <Flame size={12} className="text-orange-400" />
+                  <span className="text-orange-400 font-bold">{streak.currentStreak}</span>
+                  <span className="text-orange-400/70">日</span>
+                </div>
+              )}
+              {/* Weekly theme badge */}
+              {weeklyTheme.theme && (
+                <div className="hidden lg:flex items-center gap-1 bg-accent/10 border border-accent/30 rounded-full px-2.5 py-1 max-w-[120px]">
+                  <span className="text-accent font-bold truncate">{weeklyTheme.theme}</span>
+                </div>
+              )}
               <div className="flex items-center gap-1">
                 <Layers size={12} className="text-primary" />
                 <span className="text-primary font-bold">{completedSteps}</span>
@@ -116,6 +140,20 @@ export default function NavBar() {
       {mobileOpen && (
         <div className="md:hidden glass-panel border-t border-border/50 px-4 py-3">
           <div className="flex flex-col gap-1">
+            {/* Mobile streak + theme */}
+            <div className="flex items-center gap-2 mb-2">
+              {streak.currentStreak > 0 && (
+                <div className="flex items-center gap-1 bg-orange-500/10 border border-orange-500/30 rounded-full px-2.5 py-1 text-xs">
+                  <Flame size={12} className="text-orange-400" />
+                  <span className="text-orange-400 font-bold">{streak.currentStreak}日継続</span>
+                </div>
+              )}
+              {weeklyTheme.theme && (
+                <div className="flex items-center gap-1 bg-accent/10 border border-accent/30 rounded-full px-2.5 py-1 text-xs">
+                  <span className="text-accent font-bold">今週: {weeklyTheme.theme}</span>
+                </div>
+              )}
+            </div>
             <Link href="/" onClick={() => setMobileOpen(false)}>
               <button className={`w-full flex items-center gap-2 px-3 py-2.5 rounded text-sm font-medium transition-all text-left ${
                 location === "/" ? "bg-primary/20 text-primary" : "text-muted-foreground"
@@ -146,6 +184,13 @@ export default function NavBar() {
                     {vocabWords.length}語
                   </span>
                 )}
+              </button>
+            </Link>
+            <Link href="/settings" onClick={() => setMobileOpen(false)}>
+              <button className={`w-full flex items-center gap-2 px-3 py-2.5 rounded text-sm font-medium transition-all text-left ${
+                location === "/settings" ? "bg-secondary/60 text-foreground" : "text-muted-foreground"
+              }`}>
+                <Settings size={16} /> 設定
               </button>
             </Link>
           </div>

@@ -4,7 +4,7 @@
  * ディープネイビー基調、シアン/ライムグリーンアクセント
  */
 import { Link } from "wouter";
-import { ArrowRight, BookOpen, CheckCircle2, Layers, MessageSquare, Mic, RotateCcw, Volume2, Zap } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, Layers, MessageSquare, Mic, RotateCcw, Volume2, Zap, Flame, Calendar, Settings } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import { useApp } from "@/contexts/AppContext";
 
@@ -99,7 +99,7 @@ const steps = [
 ];
 
 function HomeContent() {
-  const { progress, vocabWords } = useApp();
+  const { progress, vocabWords, streak, weeklyTheme } = useApp();
   const completedSteps = [1,2,3,4,5,6,7].filter(n => 
     (progress as unknown as Record<string, boolean>)[`step${n}Completed`]
   ).length;
@@ -139,6 +139,46 @@ function HomeContent() {
                 AIを最大限に活用した、インプットからアウトプットまでの体系的な英語学習メソッド。
                 準備・インプット編（Step 1〜4）とアウトプット・実践編（Step 5〜7）で構成。
               </p>
+
+              {/* Weekly Theme + Streak Banner */}
+              {(weeklyTheme.theme || streak.currentStreak > 0) && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {weeklyTheme.theme && (
+                    <div className="flex items-center gap-2 bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
+                      <Calendar size={14} className="text-accent" />
+                      <div>
+                        <div className="text-xs text-muted-foreground">今週のテーマ</div>
+                        <div className="text-sm font-bold text-accent">{weeklyTheme.theme}</div>
+                      </div>
+                    </div>
+                  )}
+                  {streak.currentStreak > 0 && (
+                    <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 py-2">
+                      <Flame size={14} className="text-orange-400" />
+                      <div>
+                        <div className="text-xs text-muted-foreground">継続日数</div>
+                        <div className="text-sm font-bold text-orange-400">{streak.currentStreak}日連続</div>
+                      </div>
+                    </div>
+                  )}
+                  {!weeklyTheme.theme && (
+                    <Link href="/settings">
+                      <div className="flex items-center gap-2 bg-secondary/50 border border-dashed border-border rounded-lg px-3 py-2 cursor-pointer hover:border-accent/40 transition-all">
+                        <Settings size={14} className="text-muted-foreground" />
+                        <div className="text-xs text-muted-foreground">今週のテーマを設定する →</div>
+                      </div>
+                    </Link>
+                  )}
+                </div>
+              )}
+              {!weeklyTheme.theme && streak.currentStreak === 0 && (
+                <Link href="/settings">
+                  <div className="flex items-center gap-2 bg-secondary/50 border border-dashed border-border rounded-lg px-3 py-2 cursor-pointer hover:border-accent/40 transition-all mb-4 w-fit">
+                    <Settings size={14} className="text-muted-foreground" />
+                    <div className="text-xs text-muted-foreground">今週のテーマを設定する →</div>
+                  </div>
+                </Link>
+              )}
 
               {/* Progress Bar */}
               <div className="bg-secondary/50 rounded-lg p-4 mb-8 border border-border">

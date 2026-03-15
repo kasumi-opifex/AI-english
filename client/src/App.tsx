@@ -8,6 +8,7 @@ import { AppProvider } from "./contexts/AppContext";
 import Home from "./pages/Home";
 import StepPage from "./pages/StepPage";
 import VocabPage from "./pages/VocabPage";
+import SettingsPage from "./pages/SettingsPage";
 
 function Router() {
   return (
@@ -15,6 +16,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/step/:id"} component={StepPage} />
       <Route path={"/vocab"} component={VocabPage} />
+      <Route path={"/settings"} component={SettingsPage} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
