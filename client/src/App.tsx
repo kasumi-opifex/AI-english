@@ -2,14 +2,14 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { ThemeProvider } from "./contexts/ThemeContext";
-import { FirebaseProvider } from "./contexts/FirebaseContext";
-import { AppProvider } from "./contexts/AppContext";
-import Home from "./pages/Home";
-import StepPage from "./pages/StepPage";
-import VocabPage from "./pages/VocabPage";
-import SettingsPage from "./pages/SettingsPage";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { ThemeProvider } from "@/contexts/ThemeContext";
+import { FirebaseProvider } from "@/contexts/FirebaseContext";
+import { AppProvider } from "@/contexts/AppContext";
+import Home from "@/pages/Home";
+import StepPage from "@/pages/StepPage";
+import VocabPage from "@/pages/VocabPage";
+import SettingsPage from "@/pages/SettingsPage";
 
 function Router() {
   return (
