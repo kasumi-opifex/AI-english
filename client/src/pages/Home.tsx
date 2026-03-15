@@ -140,45 +140,54 @@ function HomeContent() {
                 準備・インプット編（Step 1〜4）とアウトプット・実践編（Step 5〜7）で構成。
               </p>
 
-              {/* Weekly Theme + Streak Banner */}
-              {(weeklyTheme.theme || streak.currentStreak > 0) && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {weeklyTheme.theme && (
-                    <div className="flex items-center gap-2 bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
-                      <Calendar size={14} className="text-accent" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">今週のテーマ</div>
-                        <div className="text-sm font-bold text-accent">{weeklyTheme.theme}</div>
-                      </div>
+              {/* Weekly Theme + Streak Banner — 常時表示 */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {/* 継続日数：常に表示 */}
+                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
+                  streak.currentStreak > 0
+                    ? "bg-orange-500/10 border-orange-500/30"
+                    : "bg-secondary/40 border-border"
+                }`}>
+                  <Flame size={14} className={streak.currentStreak > 0 ? "text-orange-400" : "text-muted-foreground"} />
+                  <div>
+                    <div className="text-xs text-muted-foreground">継続日数</div>
+                    <div className={`text-sm font-bold ${
+                      streak.currentStreak > 0 ? "text-orange-400" : "text-muted-foreground"
+                    }`}>
+                      {streak.currentStreak > 0 ? `${streak.currentStreak}日連続` : "0日（今日学習しよう！）"}
                     </div>
-                  )}
-                  {streak.currentStreak > 0 && (
-                    <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 py-2">
-                      <Flame size={14} className="text-orange-400" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">継続日数</div>
-                        <div className="text-sm font-bold text-orange-400">{streak.currentStreak}日連続</div>
-                      </div>
-                    </div>
-                  )}
-                  {!weeklyTheme.theme && (
-                    <Link href="/settings">
-                      <div className="flex items-center gap-2 bg-secondary/50 border border-dashed border-border rounded-lg px-3 py-2 cursor-pointer hover:border-accent/40 transition-all">
-                        <Settings size={14} className="text-muted-foreground" />
-                        <div className="text-xs text-muted-foreground">今週のテーマを設定する →</div>
-                      </div>
-                    </Link>
-                  )}
-                </div>
-              )}
-              {!weeklyTheme.theme && streak.currentStreak === 0 && (
-                <Link href="/settings">
-                  <div className="flex items-center gap-2 bg-secondary/50 border border-dashed border-border rounded-lg px-3 py-2 cursor-pointer hover:border-accent/40 transition-all mb-4 w-fit">
-                    <Settings size={14} className="text-muted-foreground" />
-                    <div className="text-xs text-muted-foreground">今週のテーマを設定する →</div>
                   </div>
-                </Link>
-              )}
+                </div>
+
+                {/* 今週のテーマ */}
+                {weeklyTheme.theme ? (
+                  <div className="flex items-center gap-2 bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
+                    <Calendar size={14} className="text-accent" />
+                    <div>
+                      <div className="text-xs text-muted-foreground">今週のテーマ</div>
+                      <div className="text-sm font-bold text-accent">{weeklyTheme.theme}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <Link href="/settings">
+                    <div className="flex items-center gap-2 bg-secondary/50 border border-dashed border-border rounded-lg px-3 py-2 cursor-pointer hover:border-accent/40 transition-all">
+                      <Settings size={14} className="text-muted-foreground" />
+                      <div className="text-xs text-muted-foreground">今週のテーマを設定する →</div>
+                    </div>
+                  </Link>
+                )}
+
+                {/* 最長記録（3日以上なら表示） */}
+                {streak.longestStreak >= 3 && (
+                  <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
+                    <span className="text-yellow-400 text-sm">🏆</span>
+                    <div>
+                      <div className="text-xs text-muted-foreground">最長記録</div>
+                      <div className="text-sm font-bold text-yellow-400">{streak.longestStreak}日</div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Progress Bar */}
               <div className="bg-secondary/50 rounded-lg p-4 mb-8 border border-border">
