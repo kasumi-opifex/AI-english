@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, Router as WouterRouter } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { FirebaseProvider } from "@/contexts/FirebaseContext";
@@ -11,7 +12,7 @@ import StepPage from "@/pages/StepPage";
 import VocabPage from "@/pages/VocabPage";
 import SettingsPage from "@/pages/SettingsPage";
 
-function Router() {
+function Routes() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
@@ -32,7 +33,10 @@ function App() {
           <AppProvider>
             <TooltipProvider>
               <Toaster />
-              <Router />
+              {/* GitHub Pages用: ハッシュルーティングを使用 */}
+              <WouterRouter hook={useHashLocation}>
+                <Routes />
+              </WouterRouter>
             </TooltipProvider>
           </AppProvider>
         </FirebaseProvider>
