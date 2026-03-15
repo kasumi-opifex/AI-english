@@ -5,8 +5,9 @@
 import { useState } from "react";
 import {
   Eye, EyeOff, Save, Key, Calendar, Trash2, CheckCircle2,
-  AlertCircle, ExternalLink, Bot, Database, LogIn, LogOut, Cloud,
+  AlertCircle, ExternalLink, Bot, Database, LogIn, LogOut, Cloud, QrCode, X,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import NavBar from "@/components/NavBar";
 import AuthBanner from "@/components/AuthBanner";
 import { useApp } from "@/contexts/AppContext";
@@ -53,6 +54,7 @@ export default function SettingsPage() {
   const [showFbKey, setShowFbKey] = useState(false);
 
   const [confirmClear, setConfirmClear] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   const handleSaveApi = () => {
     updateApiSettings({ geminiApiKey: geminiKey.trim(), chatgptApiKey: chatgptKey.trim(), preferredAI, geminiModel: geminiModel.trim() || "gemini-2.0-flash-lite" });
@@ -106,9 +108,45 @@ export default function SettingsPage() {
 
           {/* ── Firebase ── */}
           <SectionCard title="Firebase クラウド同期" icon={<Database size={18} />}>
+            {/* QRコードモーダル */}
+            {showQR && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+                onClick={() => setShowQR(false)}
+              >
+                <div
+                  className="bg-background border border-border rounded-2xl p-6 flex flex-col items-center gap-4 shadow-2xl"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <h3 className="text-sm font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>スマホでこのページを開く</h3>
+                    <button onClick={() => setShowQR(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl">
+                    <QRCodeSVG value={window.location.href} size={200} />
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center max-w-[220px]">
+                    QRコードをスキャンして同じページを開き、Firebase設定を入力してください
+                  </p>
+                  <p className="text-xs font-mono text-primary/70 break-all text-center max-w-[240px]">{window.location.href}</p>
+                </div>
+              </div>
+            )}
+
             <div className="bg-secondary/30 border border-border rounded-lg px-4 py-3 mb-5 text-xs text-muted-foreground leading-relaxed space-y-1">
-              <p><AlertCircle size={13} className="inline mr-1.5 text-cyan-400" />Firebase設定を入力すると、複数端末でデータが自動同期されます。</p>
-              <p>設定値はブラウザのlocalStorageにのみ保存されます（外部送信なし）。</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p><AlertCircle size={13} className="inline mr-1.5 text-cyan-400" />Firebase設定を入力すると、複数端末でデータが自動同期されます。</p>
+                  <p>設定値はブラウザのlocalStorageにのみ保存されます（外部送信なし）。</p>
+                </div>
+                <button
+                  onClick={() => setShowQR(true)}
+                  className="flex-shrink-0 flex items-center gap-1.5 bg-primary/10 border border-primary/30 text-primary rounded-lg px-3 py-2 text-xs font-medium hover:bg-primary/20 transition-all"
+                >
+                  <QrCode size={14} />
+                  QRで開く
+                </button>
+              </div>
             </div>
 
             {/* ログイン状態 */}
