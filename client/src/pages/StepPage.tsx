@@ -478,8 +478,8 @@ function SpeechTimer({ duration, label }: { duration: number; label: string }) {
 // ============================================================
 
 // Gemini API呼び出し（単語生成用）
-async function callGeminiForVocab(apiKey: string, theme: string): Promise<Array<{english: string; japanese: string; example: string}>> {
-  const GEMINI_MODEL = "gemini-2.0-flash";
+async function callGeminiForVocab(apiKey: string, theme: string, model = "gemini-2.0-flash-lite"): Promise<Array<{english: string; japanese: string; example: string}>> {
+  const GEMINI_MODEL = model;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const prompt = `トピック「${theme}」について英語で会話するために必要な英単語・フレーズを15個リストアップしてください。
@@ -546,7 +546,7 @@ function VocabInput({ topic }: { topic: string }) {
     setIsGenerating(true);
     setLastResult(null);
     try {
-      const words = await callGeminiForVocab(apiSettings.geminiApiKey, topic);
+      const words = await callGeminiForVocab(apiSettings.geminiApiKey, topic, apiSettings.geminiModel || "gemini-2.0-flash-lite");
       // 重複チェック（英単語の小文字比較）
       const existingEnglish = new Set(vocabWords.map(w => w.english.toLowerCase().trim()));
       let added = 0;

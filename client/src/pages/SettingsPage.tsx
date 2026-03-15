@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [showGemini, setShowGemini] = useState(false);
   const [showChatgpt, setShowChatgpt] = useState(false);
   const [preferredAI, setPreferredAI] = useState(apiSettings.preferredAI);
+  const [geminiModel, setGeminiModel] = useState(apiSettings.geminiModel || "gemini-2.0-flash-lite");
 
   // Weekly Theme
   const [theme, setTheme] = useState(weeklyTheme.theme);
@@ -54,7 +55,7 @@ export default function SettingsPage() {
   const [confirmClear, setConfirmClear] = useState(false);
 
   const handleSaveApi = () => {
-    updateApiSettings({ geminiApiKey: geminiKey.trim(), chatgptApiKey: chatgptKey.trim(), preferredAI });
+    updateApiSettings({ geminiApiKey: geminiKey.trim(), chatgptApiKey: chatgptKey.trim(), preferredAI, geminiModel: geminiModel.trim() || "gemini-2.0-flash-lite" });
     toast.success("APIキーを保存しました");
   };
 
@@ -256,6 +257,30 @@ export default function SettingsPage() {
               {apiSettings.geminiApiKey && (
                 <p className="text-xs text-accent mt-1 font-mono"><CheckCircle2 size={11} className="inline mr-1" />保存済み: {maskKey(apiSettings.geminiApiKey)}</p>
               )}
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-muted-foreground">Gemini モデル</label>
+                <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                  利用可能なモデル一覧 <ExternalLink size={11} />
+                </a>
+              </div>
+              <select
+                value={geminiModel}
+                onChange={e => setGeminiModel(e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary font-mono"
+              >
+                <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite（推奨・無料枠）</option>
+                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                <option value="gemini-1.5-flash-8b">gemini-1.5-flash-8b（軽量）</option>
+                <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                クォータ超過エラーが出る場合は別のモデルに切り替えてください。
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline ml-1">APIキーを新規発行 <ExternalLink size={10} className="inline" /></a>
+              </p>
             </div>
 
             <div className="mb-5">

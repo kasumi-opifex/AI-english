@@ -24,8 +24,8 @@ interface AiChatProps {
 }
 
 // ── Gemini API ──────────────────────────────────────────────
-async function callGemini(apiKey: string, messages: Message[], systemPrompt: string): Promise<string> {
-  const GEMINI_MODEL = "gemini-2.0-flash";
+async function callGemini(apiKey: string, messages: Message[], systemPrompt: string, model = "gemini-2.0-flash-lite"): Promise<string> {
+  const GEMINI_MODEL = model;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const contents = messages.map(m => ({
@@ -158,7 +158,7 @@ export default function AiChat({
     try {
       let reply: string;
       if (selectedAI === "gemini") {
-        reply = await callGemini(apiSettings.geminiApiKey, newMessages, systemPrompt);
+        reply = await callGemini(apiSettings.geminiApiKey, newMessages, systemPrompt, apiSettings.geminiModel || "gemini-2.0-flash-lite");
       } else {
         reply = await callChatGPT(apiSettings.chatgptApiKey, newMessages, systemPrompt);
       }

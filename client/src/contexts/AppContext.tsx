@@ -40,6 +40,7 @@ export interface ApiSettings {
   geminiApiKey: string;
   chatgptApiKey: string;
   preferredAI: "gemini" | "chatgpt";
+  geminiModel: string;
 }
 
 export interface StreakData {
@@ -78,7 +79,7 @@ const defaultWeeklyTheme: WeeklyTheme = {
   theme: "", startDate: new Date().toISOString().split("T")[0], memo: "",
 };
 const defaultApiSettings: ApiSettings = {
-  geminiApiKey: "", chatgptApiKey: "", preferredAI: "gemini",
+  geminiApiKey: "", chatgptApiKey: "", preferredAI: "gemini", geminiModel: "gemini-2.0-flash-lite",
 };
 const defaultStreak: StreakData = {
   currentStreak: 0, longestStreak: 0, lastActivityDate: "",
