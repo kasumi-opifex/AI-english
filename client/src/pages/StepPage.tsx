@@ -10,7 +10,7 @@ import {
   ArrowLeft, ArrowRight, CheckCircle2, BookOpen, MessageSquare, 
   Layers, Volume2, Mic, RotateCcw, Zap, Copy, Check,
   Play, Square, Timer, Plus, ChevronDown, ChevronUp, ExternalLink,
-  Bot, Pencil, X
+  Bot, Pencil, X, Sparkles, Loader2
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import { useApp } from "@/contexts/AppContext";
@@ -476,11 +476,53 @@ function SpeechTimer({ duration, label }: { duration: number; label: string }) {
 // ============================================================
 // Vocab Input Component (for Step 2)
 // ============================================================
+
+// Gemini API呼び出し（単語生成用）
+async function callGeminiForVocab(apiKey: string, theme: string): Promise<Array<{english: string; japanese: string; example: string}>> {
+  const GEMINI_MODEL = "gemini-2.0-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  const prompt = `トピック「${theme}」について英語で会話するために必要な英単語・フレーズを15個リストアップしてください。
+必ず以下のJSON形式のみで出力してください（説明文は不要）：
+[
+  {"english": "英単語", "japanese": "日本語訳", "example": "例文（英語）"},
+  ...
+]
+JSONのみ出力し、他のテキストは一切含めないでください。`;
+
+  const body = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.7 },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as {error?: {message?: string}})?.error?.message || `Gemini API error: ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  
+  // JSONを抽出（コードブロックがある場合も対応）
+  const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+  if (!jsonMatch) throw new Error("AIの応答をパースできませんでした");
+  
+  return JSON.parse(jsonMatch[0]) as Array<{english: string; japanese: string; example: string}>;
+}
+
 function VocabInput({ topic }: { topic: string }) {
-  const { addVocabWord } = useApp();
+  const { addVocabWord, vocabWords, apiSettings } = useApp();
   const [english, setEnglish] = useState("");
   const [japanese, setJapanese] = useState("");
   const [example, setExample] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [lastResult, setLastResult] = useState<{added: number; skipped: number} | null>(null);
 
   const handleAdd = () => {
     if (!english.trim() || !japanese.trim()) {
@@ -492,29 +534,108 @@ function VocabInput({ topic }: { topic: string }) {
     toast.success(`「${english}」を単語帳に追加しました`);
   };
 
+  const handleAiGenerate = async () => {
+    if (!topic.trim()) {
+      toast.error("Step 1 でテーマを設定してください");
+      return;
+    }
+    if (!apiSettings.geminiApiKey) {
+      toast.error("Gemini APIキーが設定されていません。設定ページで入力してください。");
+      return;
+    }
+    setIsGenerating(true);
+    setLastResult(null);
+    try {
+      const words = await callGeminiForVocab(apiSettings.geminiApiKey, topic);
+      // 重複チェック（英単語の小文字比較）
+      const existingEnglish = new Set(vocabWords.map(w => w.english.toLowerCase().trim()));
+      let added = 0;
+      let skipped = 0;
+      for (const w of words) {
+        if (!w.english || !w.japanese) continue;
+        if (existingEnglish.has(w.english.toLowerCase().trim())) {
+          skipped++;
+        } else {
+          addVocabWord({ english: w.english.trim(), japanese: w.japanese.trim(), example: w.example?.trim() || "", topic: topic || "一般" });
+          existingEnglish.add(w.english.toLowerCase().trim());
+          added++;
+        }
+      }
+      setLastResult({ added, skipped });
+      toast.success(`${added}語を単語帳に追加しました${skipped > 0 ? `（${skipped}語は重複のためスキップ）` : ""}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "エラーが発生しました";
+      toast.error(msg);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
-    <div className="bg-secondary/30 border border-border rounded-xl p-5">
-      <h4 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-        <Plus size={16} className="text-accent" />
-        単語帳に追加
-      </h4>
-      <div className="grid sm:grid-cols-3 gap-3 mb-3">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">英語</label>
-          <input value={english} onChange={e => setEnglish(e.target.value)} placeholder="例: enthusiastic" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">日本語</label>
-          <input value={japanese} onChange={e => setJapanese(e.target.value)} placeholder="例: 熱狂的な" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">例文（任意）</label>
-          <input value={example} onChange={e => setExample(e.target.value)} placeholder="例: She is enthusiastic about..." className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
-        </div>
+    <div className="space-y-4">
+      {/* AI自動生成ボタン */}
+      <div className="bg-primary/10 border border-primary/30 rounded-xl p-5">
+        <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          <Sparkles size={16} className="text-primary" />
+          AIで関連単語を自動生成
+        </h4>
+        {topic ? (
+          <p className="text-xs text-muted-foreground mb-4">
+            今週のテーマ <span className="text-primary font-semibold">「{topic}」</span> に関連する英単語をAIが生成し、単語帳に自動追加します（重複はスキップ）。
+          </p>
+        ) : (
+          <p className="text-xs text-amber-400 mb-4">
+            ⚠️ Step 1 でテーマを設定してからご利用ください。
+          </p>
+        )}
+        <button
+          onClick={handleAiGenerate}
+          disabled={isGenerating || !topic.trim() || !apiSettings.geminiApiKey}
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-40 glow-cyan"
+        >
+          {isGenerating ? (
+            <><Loader2 size={14} className="animate-spin" /> 生成中...</>
+          ) : (
+            <><Sparkles size={14} /> AIに関連単語を生成させる</>
+          )}
+        </button>
+        {lastResult && (
+          <div className="mt-3 text-xs">
+            <span className="text-accent font-semibold">✓ {lastResult.added}語追加</span>
+            {lastResult.skipped > 0 && <span className="text-muted-foreground ml-2">{lastResult.skipped}語スキップ（重複）</span>}
+          </div>
+        )}
+        {!apiSettings.geminiApiKey && (
+          <p className="mt-2 text-xs text-amber-400">
+            ⚠️ <Link href="/settings" className="underline">設定ページ</Link>でGemini APIキーを入力してください。
+          </p>
+        )}
       </div>
-      <button onClick={handleAdd} className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition-all">
-        <Plus size={14} /> 単語帳に追加
-      </button>
+
+      {/* 手動追加フォーム */}
+      <div className="bg-secondary/30 border border-border rounded-xl p-5">
+        <h4 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          <Plus size={16} className="text-accent" />
+          単語を手動で追加
+        </h4>
+        <div className="grid sm:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">英語</label>
+            <input value={english} onChange={e => setEnglish(e.target.value)} placeholder="例: enthusiastic" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">日本語</label>
+            <input value={japanese} onChange={e => setJapanese(e.target.value)} placeholder="例: 熱狂的な" className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">例文（任意）</label>
+            <input value={example} onChange={e => setExample(e.target.value)} placeholder="例: She is enthusiastic about..." className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent" />
+          </div>
+        </div>
+        <button onClick={handleAdd} className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition-all">
+          <Plus size={14} /> 単語帳に追加
+        </button>
+      </div>
     </div>
   );
 }
@@ -722,10 +843,10 @@ function StepPageContent() {
   const params = useParams<{ id: string }>();
   const stepId = parseInt(params.id || "1");
   const step = stepData.find(s => s.id === stepId);
-  const { progress, updateProgress, recordActivity } = useApp();
+  const { progress, updateProgress, recordActivity, weeklyTheme, updateWeeklyTheme } = useApp();
   const [showPrompts, setShowPrompts] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
-  const [topicInput, setTopicInput] = useState(progress.currentTopic || "");
+  const [topicInput, setTopicInput] = useState(weeklyTheme.theme || "");
 
   if (!step) {
     return (
@@ -754,8 +875,9 @@ function StepPageContent() {
   };
 
   const handleTopicSave = () => {
+    updateWeeklyTheme({ theme: topicInput, startDate: new Date().toISOString().split("T")[0] });
     updateProgress({ currentTopic: topicInput });
-    toast.success("トピックを保存しました");
+    toast.success("今週のテーマを設定しました！");
   };
 
   return (
@@ -840,10 +962,14 @@ function StepPageContent() {
                 </div>
               </div>
 
-              {/* Topic Input (Step 1 & 2) */}
+              {/* Topic Input (Step 1 のみ編集可能) */}
               {step.hasTopicInput && (
-                <div className="glass-panel rounded-xl p-5 border border-border">
-                  <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider mb-3 font-mono">TOPIC</h2>
+                <div className="glass-panel rounded-xl p-5 border border-primary/30 bg-primary/5">
+                  <h2 className="font-bold text-sm text-primary uppercase tracking-wider mb-1 font-mono flex items-center gap-2">
+                    <Zap size={14} />
+                    今週のテーマを設定
+                  </h2>
+                  <p className="text-xs text-muted-foreground mb-3">ここで設定したテーマがStep 2以降で使われます。</p>
                   <div className="flex gap-2">
                     <input
                       value={topicInput}
@@ -851,15 +977,28 @@ function StepPageContent() {
                       placeholder="例: コーヒー、ランニング、映画鑑賞..."
                       className="flex-1 bg-background border border-border rounded px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                     />
-                    <button onClick={handleTopicSave} className="bg-primary text-primary-foreground px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition-all">
-                      保存
+                    <button onClick={handleTopicSave} className="bg-primary text-primary-foreground px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition-all glow-cyan">
+                      設定する
                     </button>
                   </div>
-                  {progress.currentTopic && (
+                  {weeklyTheme.theme && (
                     <div className="mt-2 text-xs text-muted-foreground">
-                      現在のトピック: <span className="text-primary font-semibold">{progress.currentTopic}</span>
+                      現在のテーマ: <span className="text-primary font-semibold">「{weeklyTheme.theme}」</span>
+                      {weeklyTheme.startDate && <span className="ml-2">（{weeklyTheme.startDate} 〜）</span>}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Current Theme Display (Step 2以降 — 読み取り専用) */}
+              {!step.hasTopicInput && weeklyTheme.theme && (
+                <div className="glass-panel rounded-xl p-4 border border-primary/20 bg-primary/5">
+                  <div className="flex items-center gap-2">
+                    <Zap size={14} className="text-primary" />
+                    <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">今週のテーマ</span>
+                  </div>
+                  <p className="text-base font-bold text-primary mt-1">「{weeklyTheme.theme}」</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">テーマの変更は Step 1 で行えます。</p>
                 </div>
               )}
 
@@ -882,7 +1021,7 @@ function StepPageContent() {
               {step.hasWPM && <WPMCalculator />}
 
               {/* Vocab Input */}
-              {step.hasVocabInput && <VocabInput topic={progress.currentTopic} />}
+              {step.hasVocabInput && <VocabInput topic={weeklyTheme.theme || progress.currentTopic} />}
 
               {/* Linking Examples */}
               {step.linkingExamples && (

@@ -25,7 +25,7 @@ interface AiChatProps {
 
 // ── Gemini API ──────────────────────────────────────────────
 async function callGemini(apiKey: string, messages: Message[], systemPrompt: string): Promise<string> {
-  const GEMINI_MODEL = "gemini-1.5-flash";
+  const GEMINI_MODEL = "gemini-2.0-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const contents = messages.map(m => ({
